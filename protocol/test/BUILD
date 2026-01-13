@@ -17,3 +17,8 @@ filegroup(
     name = "test_data",
     srcs = glob(["*.bin"]),
 )
+
+filegroup(
+    name = "test_fwupdate",
+    srcs = glob(["*.fwupdate"]),
+)

@@ -25,7 +25,6 @@ extern "C" {
 
 #include "transports/libhoth_device.h"
 
-
 #define EROT_CHANNEL_ID 0x45524F54  // 'EROT'
 #define HOTH_FIFO_MAX_REQUEST_SIZE 1024
 #define HOTH_PRV_CMD_HOTH_CHANNEL_STATUS 0x0037
