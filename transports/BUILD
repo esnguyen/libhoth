@@ -23,6 +23,7 @@ cc_library(
     deps = [
         ":libhoth_device",
         ":libhoth_ec",
+        "//protocol:libhoth_status",
     ],
 )
 
@@ -33,6 +34,7 @@ cc_library(
     deps = [
         ":libhoth_device",
         ":libhoth_ec",
+        "//protocol:libhoth_status",
     ],
 )
 
@@ -43,6 +45,7 @@ cc_library(
     deps = [
         ":libhoth_device",
         ":libhoth_usb_device",
+        "//protocol:libhoth_status",
         "//protocol:util",
         "@libusb",
     ],
@@ -54,7 +57,10 @@ cc_library(
     hdrs = ["libhoth_dbus.h"],
     defines = ["DBUS_BACKEND"],
     linkopts = ["-lsystemd"],
-    deps = [":libhoth_device"],
+    deps = [
+        ":libhoth_device",
+        "//protocol:libhoth_status",
+    ],
 )
 
 cc_library(

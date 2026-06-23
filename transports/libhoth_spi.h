@@ -19,6 +19,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "protocol/status.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -61,26 +63,31 @@ enum {
 
 // Note that the options struct only needs to to live for the duration of
 // this function call. It can be destroyed once libhoth_spi_open returns.
-int libhoth_spi_open(const struct libhoth_spi_device_init_options* options,
-                     struct libhoth_device** out);
-int libhoth_tpm_spi_probe(struct libhoth_device* dev);
+libhoth_error libhoth_spi_open(
+    const struct libhoth_spi_device_init_options* options,
+    struct libhoth_device** out);
+libhoth_error libhoth_tpm_spi_probe(struct libhoth_device* dev);
 
-int libhoth_spi_send_request(struct libhoth_device* dev, const void* request,
-                             size_t request_size);
+libhoth_error libhoth_spi_send_request(struct libhoth_device* dev,
+                                       const void* request,
+                                       size_t request_size);
 
-int libhoth_spi_receive_response(struct libhoth_device* dev, void* response,
-                                 size_t max_response_size, size_t* actual_size,
-                                 int timeout_ms);
+libhoth_error libhoth_spi_receive_response(struct libhoth_device* dev,
+                                           void* response,
+                                           size_t max_response_size,
+                                           size_t* actual_size, int timeout_ms);
 
-int libhoth_spi_buffer_request(struct libhoth_device* dev, const void* request,
-                               size_t request_size);
+libhoth_error libhoth_spi_buffer_request(struct libhoth_device* dev,
+                                         const void* request,
+                                         size_t request_size);
 
-int libhoth_spi_send_and_receive_response(struct libhoth_device* dev,
-                                          void* response,
-                                          size_t max_response_size,
-                                          size_t* actual_size, int timeout_ms);
+libhoth_error libhoth_spi_send_and_receive_response(struct libhoth_device* dev,
+                                                    void* response,
+                                                    size_t max_response_size,
+                                                    size_t* actual_size,
+                                                    int timeout_ms);
 
-int libhoth_spi_close(struct libhoth_device* dev);
+libhoth_error libhoth_spi_close(struct libhoth_device* dev);
 
 #ifdef __cplusplus
 }

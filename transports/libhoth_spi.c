@@ -15,6 +15,7 @@
 #include "transports/libhoth_spi.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <linux/spi/spidev.h>
 #include <linux/types.h>
@@ -34,6 +35,21 @@
 #include "transports/libhoth_ec.h"
 
 #define DID_VID_ADDR 0xD40F00
+
+static libhoth_error spi_err_posix(int errnum) {
+  if (errnum == 0) {
+    return HOTH_SUCCESS;
+  }
+  return LIBHOTH_ERR_CONSTRUCT(HOTH_CTX_SPI, HOTH_HOST_SPACE_POSIX, errnum);
+}
+
+static libhoth_error spi_err_libhoth(int libhoth_err) {
+  if (libhoth_err == LIBHOTH_OK) {
+    return HOTH_SUCCESS;
+  }
+  return LIBHOTH_ERR_CONSTRUCT(HOTH_CTX_SPI, HOTH_HOST_SPACE_LIBHOTH,
+                               libhoth_err);
+}
 
 static int spi_nor_address(uint8_t* buf, uint32_t address,
                            bool address_mode_4b) {
@@ -209,72 +225,73 @@ static int spi_nor_read(int fd, bool address_mode_4b, unsigned int address,
   return LIBHOTH_OK;
 }
 
-static int libhoth_spi_claim(struct libhoth_device* dev) {
+static libhoth_error libhoth_spi_claim(struct libhoth_device* dev) {
   if (dev == NULL) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return spi_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
   const struct libhoth_spi_device* spi_dev = dev->user_ctx;
   if (spi_dev == NULL) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return spi_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
   if (flock(spi_dev->fd, LOCK_EX | LOCK_NB) != 0) {
     // Maybe some other process has the lock?
-    return LIBHOTH_ERR_INTERFACE_BUSY;
+    return spi_err_libhoth(LIBHOTH_ERR_INTERFACE_BUSY);
   }
-  return LIBHOTH_OK;
+  return HOTH_SUCCESS;
 }
 
-static int libhoth_spi_release(struct libhoth_device* dev) {
+static libhoth_error libhoth_spi_release(struct libhoth_device* dev) {
   if (dev == NULL) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return spi_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
   const struct libhoth_spi_device* spi_dev = dev->user_ctx;
   if (spi_dev == NULL) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return spi_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
   if (flock(spi_dev->fd, LOCK_UN) != 0) {
     // Maybe `fd` is invalid?
-    return LIBHOTH_ERR_FAIL;
+    return spi_err_libhoth(LIBHOTH_ERR_FAIL);
   }
-  return LIBHOTH_OK;
+  return HOTH_SUCCESS;
 }
 
-static int libhoth_spi_reconnect(struct libhoth_device* dev) {
+static libhoth_error libhoth_spi_reconnect(struct libhoth_device* dev) {
   // TODO: Maybe check for JEDEC ID?
   // no-op
-  return 0;
+  return HOTH_SUCCESS;
 }
 
-int libhoth_spi_open(const struct libhoth_spi_device_init_options* options,
-                     struct libhoth_device** out) {
+libhoth_error libhoth_spi_open(
+    const struct libhoth_spi_device_init_options* options,
+    struct libhoth_device** out) {
   if (out == NULL || options == NULL || options->path == NULL) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return spi_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
-  int status = LIBHOTH_OK;
+  libhoth_error status = HOTH_SUCCESS;
   int fd = -1;
   struct libhoth_device* dev = NULL;
   struct libhoth_spi_device* spi_dev = NULL;
 
   fd = open(options->path, O_RDWR | O_CLOEXEC);
   if (fd < 0) {
-    status = LIBHOTH_ERR_INTERFACE_NOT_FOUND;
+    status = spi_err_libhoth(LIBHOTH_ERR_INTERFACE_NOT_FOUND);
     goto err_out;
   }
 
   dev = calloc(1, sizeof(struct libhoth_device));
   if (dev == NULL) {
-    status = LIBHOTH_ERR_MALLOC_FAILED;
+    status = spi_err_libhoth(LIBHOTH_ERR_MALLOC_FAILED);
     goto err_out;
   }
 
   spi_dev = calloc(1, sizeof(struct libhoth_spi_device));
   if (spi_dev == NULL) {
-    status = LIBHOTH_ERR_MALLOC_FAILED;
+    status = spi_err_libhoth(LIBHOTH_ERR_MALLOC_FAILED);
     goto err_out;
   }
 
@@ -299,14 +316,14 @@ int libhoth_spi_open(const struct libhoth_spi_device_init_options* options,
   dev->user_ctx = spi_dev;
 
   status = libhoth_claim_device(dev, options->timeout_us);
-  if (status != LIBHOTH_OK) {
+  if (status != HOTH_SUCCESS) {
     goto err_out;
   }
 
   if (options->bits) {
     const uint8_t bits = (uint8_t)options->bits;
     if (ioctl(fd, SPI_IOC_WR_BITS_PER_WORD, bits) < 0) {
-      status = LIBHOTH_ERR_FAIL;
+      status = spi_err_libhoth(LIBHOTH_ERR_FAIL);
       goto err_out;
     }
   }
@@ -314,7 +331,7 @@ int libhoth_spi_open(const struct libhoth_spi_device_init_options* options,
   if (options->mode) {
     const uint8_t mode = (uint8_t)options->mode;
     if (ioctl(fd, SPI_IOC_WR_MODE, &mode) < 0) {
-      status = LIBHOTH_ERR_FAIL;
+      status = spi_err_libhoth(LIBHOTH_ERR_FAIL);
       goto err_out;
     }
   }
@@ -322,13 +339,13 @@ int libhoth_spi_open(const struct libhoth_spi_device_init_options* options,
   if (options->speed) {
     const uint32_t speed = (uint32_t)options->speed;
     if (ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed) < 0) {
-      status = LIBHOTH_ERR_FAIL;
+      status = spi_err_libhoth(LIBHOTH_ERR_FAIL);
       goto err_out;
     }
   }
 
   *out = dev;
-  return LIBHOTH_OK;
+  return HOTH_SUCCESS;
 
 err_out:
   if (fd >= 0) {
@@ -344,30 +361,33 @@ err_out:
   return status;
 }
 
-int libhoth_spi_send_request(struct libhoth_device* dev, const void* request,
-                             size_t request_size) {
+libhoth_error libhoth_spi_send_request(struct libhoth_device* dev,
+                                       const void* request,
+                                       size_t request_size) {
   if (dev == NULL) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return spi_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
   struct libhoth_spi_device* spi_dev =
       (struct libhoth_spi_device*)dev->user_ctx;
 
-  return spi_nor_write(spi_dev->fd, spi_dev->address_mode_4b,
-                       spi_dev->mailbox_address, request, request_size,
-                       spi_dev->device_busy_wait_timeout,
-                       spi_dev->device_busy_wait_check_interval);
+  return spi_err_libhoth(spi_nor_write(
+      spi_dev->fd, spi_dev->address_mode_4b, spi_dev->mailbox_address, request,
+      request_size, spi_dev->device_busy_wait_timeout,
+      spi_dev->device_busy_wait_check_interval));
 }
 
-int libhoth_spi_receive_response(struct libhoth_device* dev, void* response,
-                                 size_t max_response_size, size_t* actual_size,
-                                 int timeout_ms) {
+libhoth_error libhoth_spi_receive_response(struct libhoth_device* dev,
+                                           void* response,
+                                           size_t max_response_size,
+                                           size_t* actual_size,
+                                           int timeout_ms) {
   if (dev == NULL) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return spi_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
   if (max_response_size < sizeof(struct hoth_host_response)) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return spi_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
   size_t total_bytes = 0;
@@ -381,7 +401,7 @@ int libhoth_spi_receive_response(struct libhoth_device* dev, void* response,
                         spi_dev->mailbox_address, response,
                         sizeof(struct hoth_host_response));
   if (status != LIBHOTH_OK) {
-    return status;
+    return spi_err_libhoth(status);
   }
 
   total_bytes = sizeof(struct hoth_host_response);
@@ -391,7 +411,7 @@ int libhoth_spi_receive_response(struct libhoth_device* dev, void* response,
   }
 
   if (max_response_size < (total_bytes + host_response.data_len)) {
-    return LIBHOTH_ERR_RESPONSE_BUFFER_OVERFLOW;
+    return spi_err_libhoth(LIBHOTH_ERR_RESPONSE_BUFFER_OVERFLOW);
   }
 
   if (host_response.data_len > 0) {
@@ -401,7 +421,7 @@ int libhoth_spi_receive_response(struct libhoth_device* dev, void* response,
                           spi_dev->mailbox_address + total_bytes, data_start,
                           host_response.data_len);
     if (status != LIBHOTH_OK) {
-      return status;
+      return spi_err_libhoth(status);
     }
   }
 
@@ -409,46 +429,51 @@ int libhoth_spi_receive_response(struct libhoth_device* dev, void* response,
     *actual_size += host_response.data_len;
   }
 
-  return LIBHOTH_OK;
+  return HOTH_SUCCESS;
 }
 
-int libhoth_spi_buffer_request(struct libhoth_device* dev, const void* request,
-                               size_t request_size) {
+libhoth_error libhoth_spi_buffer_request(struct libhoth_device* dev,
+                                         const void* request,
+                                         size_t request_size) {
   if (dev == NULL) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return spi_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
   struct libhoth_spi_device* spi_dev =
       (struct libhoth_spi_device*)dev->user_ctx;
 
   if (spi_dev->buffered_request != NULL) {
-    return LIBHOTH_ERR_INTERFACE_BUSY;
+    return spi_err_libhoth(LIBHOTH_ERR_INTERFACE_BUSY);
   }
 
   spi_dev->buffered_request = malloc(request_size);
+  if (spi_dev->buffered_request == NULL) {
+    return spi_err_libhoth(LIBHOTH_ERR_MALLOC_FAILED);
+  }
   spi_dev->buffered_request_size = request_size;
   memcpy(spi_dev->buffered_request, request, request_size);
 
-  return LIBHOTH_OK;
+  return HOTH_SUCCESS;
 }
 
-int libhoth_spi_send_and_receive_response(struct libhoth_device* dev,
-                                          void* response,
-                                          size_t max_response_size,
-                                          size_t* actual_size, int timeout_ms) {
+libhoth_error libhoth_spi_send_and_receive_response(struct libhoth_device* dev,
+                                                    void* response,
+                                                    size_t max_response_size,
+                                                    size_t* actual_size,
+                                                    int timeout_ms) {
   if (dev == NULL) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return spi_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
   if (max_response_size < sizeof(struct hoth_host_response)) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return spi_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
   struct libhoth_spi_device* spi_dev =
       (struct libhoth_spi_device*)dev->user_ctx;
 
   if (spi_dev->buffered_request == NULL) {
-    return LIBHOTH_ERR_INTERFACE_BUSY;
+    return spi_err_libhoth(LIBHOTH_ERR_INTERFACE_BUSY);
   }
 
   uint32_t address = spi_dev->mailbox_address;
@@ -498,16 +523,16 @@ int libhoth_spi_send_and_receive_response(struct libhoth_device* dev,
       .len = max_response_size,
   };
 
-  int rc = LIBHOTH_OK;
+  libhoth_error rc = HOTH_SUCCESS;
   int status = ioctl(spi_dev->fd, SPI_IOC_MESSAGE(5), xfer);
   if (status < 0) {
-    rc = LIBHOTH_ERR_FAIL;
+    rc = spi_err_posix(errno);
   } else {
     struct hoth_host_response* host_response =
         (struct hoth_host_response*)response;
     if (host_response->data_len >
         (max_response_size - sizeof(struct hoth_host_response))) {
-      rc = LIBHOTH_ERR_RESPONSE_BUFFER_OVERFLOW;
+      rc = spi_err_libhoth(LIBHOTH_ERR_RESPONSE_BUFFER_OVERFLOW);
     } else if (actual_size) {
       *actual_size =
           (size_t)host_response->data_len + sizeof(struct hoth_host_response);
@@ -521,7 +546,10 @@ int libhoth_spi_send_and_receive_response(struct libhoth_device* dev,
   return rc;
 }
 
-int libhoth_tpm_spi_probe(struct libhoth_device* dev) {
+libhoth_error libhoth_tpm_spi_probe(struct libhoth_device* dev) {
+  if (dev == NULL) {
+    return spi_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
+  }
   struct libhoth_spi_device* spi_dev =
       (struct libhoth_spi_device*)dev->user_ctx;
 
@@ -545,7 +573,7 @@ int libhoth_tpm_spi_probe(struct libhoth_device* dev) {
   const int status = ioctl(spi_dev->fd, SPI_IOC_MESSAGE(2), xfer);
   if (status < 0) {
     printf("Failed to read DID_VID: %x\n", status);
-    return -1;
+    return spi_err_posix(errno);
   }
 
   uint16_t did = (uint16_t)rx_buf[4] << 8 | rx_buf[3];
@@ -554,17 +582,17 @@ int libhoth_tpm_spi_probe(struct libhoth_device* dev) {
   printf("DID: 0x%x\n", did);
   printf("VID: 0x%x\n", vid);
 
-  return LIBHOTH_OK;
+  return HOTH_SUCCESS;
 }
 
-int libhoth_spi_close(struct libhoth_device* dev) {
+libhoth_error libhoth_spi_close(struct libhoth_device* dev) {
   if (dev == NULL) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return spi_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
   struct libhoth_spi_device* spi_dev =
       (struct libhoth_spi_device*)dev->user_ctx;
   close(spi_dev->fd);
   free(dev->user_ctx);
-  return LIBHOTH_OK;
+  return HOTH_SUCCESS;
 }

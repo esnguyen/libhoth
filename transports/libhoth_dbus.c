@@ -22,6 +22,21 @@
 
 #include "transports/libhoth_device.h"
 
+static libhoth_error dbus_err_posix(int errnum) {
+  if (errnum == 0) {
+    return HOTH_SUCCESS;
+  }
+  return LIBHOTH_ERR_CONSTRUCT(HOTH_CTX_INIT, HOTH_HOST_SPACE_POSIX, errnum);
+}
+
+static libhoth_error dbus_err_libhoth(int libhoth_err) {
+  if (libhoth_err == LIBHOTH_OK) {
+    return HOTH_SUCCESS;
+  }
+  return LIBHOTH_ERR_CONSTRUCT(HOTH_CTX_INIT, HOTH_HOST_SPACE_LIBHOTH,
+                               libhoth_err);
+}
+
 #define HOTHD_SERVICE "xyz.openbmc_project.Control.Hoth"
 #define HOTHD_OBJECT "/xyz/openbmc_project/Control/Hoth"
 #define HOTHD_INTERFACE "xyz.openbmc_project.Control.Hoth"
@@ -39,8 +54,8 @@ struct libhoth_dbus_device {
   char* object;
 };
 
-static int send(struct libhoth_device* dev, const void* request,
-                size_t request_size) {
+static libhoth_error send(struct libhoth_device* dev, const void* request,
+                          size_t request_size) {
   struct libhoth_dbus_device* ctx = (struct libhoth_dbus_device*)dev->user_ctx;
 
   if (ctx->request) {
@@ -70,33 +85,34 @@ static int send(struct libhoth_device* dev, const void* request,
 
   // Record the pending request.
   ctx->request = message;
-  return LIBHOTH_OK;
+  return HOTH_SUCCESS;
 
 cleanup:
   sd_bus_message_unref(message);
-  return rv;
+  return dbus_err_posix(-rv);
 }
 
-static int receive(struct libhoth_device* dev, void* response,
-                   size_t max_response_size, size_t* actual_size,
-                   int timeout_ms) {
+static libhoth_error receive(struct libhoth_device* dev, void* response,
+                             size_t max_response_size, size_t* actual_size,
+                             int timeout_ms) {
   struct libhoth_dbus_device* ctx = (struct libhoth_dbus_device*)dev->user_ctx;
   sd_bus_error error = SD_BUS_ERROR_NULL;
   sd_bus_message* reply = NULL;
-  int rv = LIBHOTH_OK;
+  libhoth_error rc = HOTH_SUCCESS;
 
   if (!ctx->request) {
     fprintf(stderr,
             "Can't receive a response because there's no pending request.\n");
-    rv = -1;
+    rc = dbus_err_libhoth(LIBHOTH_ERR_FAIL);
     goto cleanup;
   }
 
   // Send the pending host command request.
   uint64_t timeout_usec = timeout_ms * 1000;
-  rv = sd_bus_call(ctx->bus, ctx->request, timeout_usec, &error, &reply);
+  int rv = sd_bus_call(ctx->bus, ctx->request, timeout_usec, &error, &reply);
   if (rv < 0) {
     fprintf(stderr, "D-Bus call failed: %s\n", error.message);
+    rc = dbus_err_posix(-rv);
     goto cleanup;
   }
 
@@ -106,13 +122,14 @@ static int receive(struct libhoth_device* dev, void* response,
   rv = sd_bus_message_read_array(reply, 'y', &buf, &size);
   if (rv < 0) {
     fprintf(stderr, "Failed to read response array: %s\n", strerror(-rv));
+    rc = dbus_err_posix(-rv);
     goto cleanup;
   }
 
   if (size > max_response_size) {
     fprintf(stderr, "response size (%ld) greater than max allowed size (%ld)\n",
             size, max_response_size);
-    rv = -2;
+    rc = dbus_err_libhoth(LIBHOTH_ERR_RESPONSE_BUFFER_OVERFLOW);
     goto cleanup;
   }
 
@@ -125,17 +142,15 @@ static int receive(struct libhoth_device* dev, void* response,
   // We need to copy the response bytes out.
   memcpy(response, buf, size);
 
-  rv = LIBHOTH_OK;
-
 cleanup:
   sd_bus_message_unref(reply);
   sd_bus_error_free(&error);
   sd_bus_message_unref(ctx->request);
   ctx->request = NULL;
-  return rv;
+  return rc;
 }
 
-static int close(struct libhoth_device* dev) {
+static libhoth_error close(struct libhoth_device* dev) {
   struct libhoth_dbus_device* ctx = (struct libhoth_dbus_device*)dev->user_ctx;
 
   free(ctx->object);
@@ -153,22 +168,22 @@ static int close(struct libhoth_device* dev) {
   free(ctx);
   dev->user_ctx = NULL;
 
-  return LIBHOTH_OK;
+  return HOTH_SUCCESS;
 }
 
-static int claim(struct libhoth_device* dev) {
+static libhoth_error claim(struct libhoth_device* dev) {
   // no-op
-  return LIBHOTH_OK;
+  return HOTH_SUCCESS;
 }
 
-static int release(struct libhoth_device* dev) {
+static libhoth_error release(struct libhoth_device* dev) {
   // no-op
-  return LIBHOTH_OK;
+  return HOTH_SUCCESS;
 }
 
-static int reconnect(struct libhoth_device* dev) {
+static libhoth_error reconnect(struct libhoth_device* dev) {
   // no-op
-  return LIBHOTH_OK;
+  return HOTH_SUCCESS;
 }
 
 char* with_hoth_id(const char* base, char delimiter, const char* hoth_id) {
@@ -194,12 +209,13 @@ char* with_hoth_id(const char* base, char delimiter, const char* hoth_id) {
   return ret;
 }
 
-int libhoth_dbus_open(const struct libhoth_dbus_device_init_options* options,
-                      struct libhoth_device** out) {
+libhoth_error libhoth_dbus_open(
+    const struct libhoth_dbus_device_init_options* options,
+    struct libhoth_device** out) {
   *out = NULL;
 
   if (!options || !options->hoth_id || !out) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return dbus_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
   sd_bus* bus = NULL;
@@ -207,34 +223,36 @@ int libhoth_dbus_open(const struct libhoth_dbus_device_init_options* options,
   struct libhoth_dbus_device* dbus_dev = NULL;
   char* service = NULL;
   char* object = NULL;
+  libhoth_error status = HOTH_SUCCESS;
 
   int rv = sd_bus_open_system(&bus);
   if (rv < 0) {
     fprintf(stderr, "Failed to connect to system bus: %s\n", strerror(-rv));
+    status = dbus_err_posix(-rv);
     goto cleanup;
   }
 
   dev = calloc(1, sizeof(struct libhoth_device));
   if (dev == NULL) {
-    rv = LIBHOTH_ERR_MALLOC_FAILED;
+    status = dbus_err_libhoth(LIBHOTH_ERR_MALLOC_FAILED);
     goto cleanup;
   }
 
   dbus_dev = calloc(1, sizeof(struct libhoth_dbus_device));
   if (dbus_dev == NULL) {
-    rv = LIBHOTH_ERR_MALLOC_FAILED;
+    status = dbus_err_libhoth(LIBHOTH_ERR_MALLOC_FAILED);
     goto cleanup;
   }
 
   service = with_hoth_id(HOTHD_SERVICE, '.', options->hoth_id);
   if (service == NULL) {
-    rv = LIBHOTH_ERR_MALLOC_FAILED;
+    status = dbus_err_libhoth(LIBHOTH_ERR_MALLOC_FAILED);
     goto cleanup;
   }
 
   object = with_hoth_id(HOTHD_OBJECT, '/', options->hoth_id);
   if (object == NULL) {
-    rv = LIBHOTH_ERR_MALLOC_FAILED;
+    status = dbus_err_libhoth(LIBHOTH_ERR_MALLOC_FAILED);
     goto cleanup;
   }
 
@@ -251,7 +269,7 @@ int libhoth_dbus_open(const struct libhoth_dbus_device_init_options* options,
   dev->user_ctx = dbus_dev;
 
   *out = dev;
-  return LIBHOTH_OK;
+  return HOTH_SUCCESS;
 
 cleanup:
   free(object);
@@ -259,5 +277,5 @@ cleanup:
   free(dbus_dev);
   free(dev);
   sd_bus_unref(bus);
-  return rv;
+  return status;
 }

@@ -328,9 +328,10 @@ struct libhoth_device* htool_libhoth_usb_device(void) {
                                                  .prng_seed = prng_seed,
                                                  .timeout_us = timeout_us};
 
-  int rv = libhoth_usb_open(&opts, &result);
-  if (rv != LIBHOTH_OK) {
-    fprintf(stderr, "libhoth_usb_open failed: %d\n", rv);
+  libhoth_error rv = libhoth_usb_open(&opts, &result);
+  if (rv != HOTH_SUCCESS) {
+    fprintf(stderr, "libhoth_usb_open failed: 0x%016llx\n",
+            (unsigned long long)rv);
     return NULL;
   }
 

@@ -96,12 +96,7 @@ libhoth_error libhoth_dfu_update(struct libhoth_device* dev,
 
   // TODO: Wait for chip to come back and confirm version
   usleep(LIBHOTH_REBOOT_DELAY_MS * 1000);
-  int ret = libhoth_device_reconnect(dev);
-  if (ret != LIBHOTH_OK) {
-    return LIBHOTH_ERR_CONSTRUCT(HOTH_CTX_CMD_EXEC, HOTH_HOST_SPACE_LIBHOTH,
-                                 ret);
-  }
-  return HOTH_SUCCESS;
+  return libhoth_device_reconnect(dev);
 }
 
 static int dfu_update_count(

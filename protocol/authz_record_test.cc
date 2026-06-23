@@ -43,14 +43,14 @@ TEST_F(LibHothTest, authz_erase_test) {
                           UsesCommand(HOTH_CMD_BOARD_SPECIFIC_BASE +
                                       HOTH_PRV_CMD_HOTH_SET_AUTHZ_RECORD),
                           _))
-      .WillOnce(Return(LIBHOTH_OK));
+      .WillOnce(Return(HOTH_SUCCESS));
 
+  libhoth_error mock_err = LIBHOTH_ERR_CONSTRUCT(
+      HOTH_CTX_USB, HOTH_HOST_SPACE_LIBHOTH, LIBHOTH_ERR_TIMEOUT);
   EXPECT_CALL(mock_, receive)
-      .WillOnce(DoAll(CopyResp(&dummy, 0), Return(LIBHOTH_ERR_TIMEOUT)));
+      .WillOnce(DoAll(CopyResp(&dummy, 0), Return(mock_err)));
 
-  EXPECT_EQ(libhoth_authz_record_erase(&hoth_dev_),
-            LIBHOTH_ERR_CONSTRUCT(HOTH_CTX_CMD_EXEC, HOTH_HOST_SPACE_LIBHOTH,
-                                  LIBHOTH_ERR_TIMEOUT));
+  EXPECT_EQ(libhoth_authz_record_erase(&hoth_dev_), mock_err);
 }
 
 TEST_F(LibHothTest, authz_read_test) {

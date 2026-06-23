@@ -21,47 +21,58 @@
 
 #include "libhoth_device.h"
 
-int libhoth_send_request(struct libhoth_device* dev, const void* request,
-                         size_t request_size) {
+libhoth_error libhoth_send_request(struct libhoth_device* dev,
+                                   const void* request, size_t request_size) {
   if (dev == NULL) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return LIBHOTH_ERR_CONSTRUCT(HOTH_CTX_INIT, HOTH_HOST_SPACE_LIBHOTH,
+                                 LIBHOTH_ERR_INVALID_PARAMETER);
   }
   return dev->send(dev, request, request_size);
 }
 
-int libhoth_receive_response(struct libhoth_device* dev, void* response,
-                             size_t max_response_size, size_t* actual_size,
-                             int timeout_ms) {
+libhoth_error libhoth_receive_response(struct libhoth_device* dev,
+                                       void* response, size_t max_response_size,
+                                       size_t* actual_size, int timeout_ms) {
   if (dev == NULL) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return LIBHOTH_ERR_CONSTRUCT(HOTH_CTX_INIT, HOTH_HOST_SPACE_LIBHOTH,
+                                 LIBHOTH_ERR_INVALID_PARAMETER);
   }
   return dev->receive(dev, response, max_response_size, actual_size,
                       timeout_ms);
 }
 
-int libhoth_device_reconnect(struct libhoth_device* dev) {
+libhoth_error libhoth_device_reconnect(struct libhoth_device* dev) {
   if (dev == NULL) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return LIBHOTH_ERR_CONSTRUCT(HOTH_CTX_INIT, HOTH_HOST_SPACE_LIBHOTH,
+                                 LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
   if (dev->reconnect == NULL) {
-    return LIBHOTH_ERR_UNSUPPORTED_VERSION;
+    return LIBHOTH_ERR_CONSTRUCT(HOTH_CTX_INIT, HOTH_HOST_SPACE_LIBHOTH,
+                                 LIBHOTH_ERR_UNSUPPORTED_VERSION);
   }
 
   return dev->reconnect(dev);
 }
 
-int libhoth_device_close(struct libhoth_device* dev) {
+libhoth_error libhoth_device_close(struct libhoth_device* dev) {
   if (dev == NULL) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return LIBHOTH_ERR_CONSTRUCT(HOTH_CTX_INIT, HOTH_HOST_SPACE_LIBHOTH,
+                                 LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
-  int status = dev->close(dev);
+  libhoth_error status = dev->close(dev);
   free(dev);
   return status;
 }
 
-int libhoth_claim_device(struct libhoth_device* dev, uint32_t timeout_us) {
+libhoth_error libhoth_claim_device(struct libhoth_device* dev,
+                                   uint32_t timeout_us) {
+  if (dev == NULL) {
+    return LIBHOTH_ERR_CONSTRUCT(HOTH_CTX_INIT, HOTH_HOST_SPACE_LIBHOTH,
+                                 LIBHOTH_ERR_INVALID_PARAMETER);
+  }
+
   enum {
     // The maximum time to sleep per attempt.
     // Limited by `usleep()` to <1 second.
@@ -74,9 +85,14 @@ int libhoth_claim_device(struct libhoth_device* dev, uint32_t timeout_us) {
   uint32_t total_waiting_us = 0;
 
   while (true) {
-    int status = dev->claim(dev);
+    libhoth_error status = dev->claim(dev);
 
-    if (status != LIBHOTH_ERR_INTERFACE_BUSY) {
+    if (status == HOTH_SUCCESS) {
+      return HOTH_SUCCESS;
+    }
+
+    uint32_t code = LIBHOTH_ERR_GET_CODE(status);
+    if (code != LIBHOTH_ERR_INTERFACE_BUSY) {
       // We either claimed the device or encountered an unexpected error. Let
       // the caller know.
       return status;
@@ -87,7 +103,8 @@ int libhoth_claim_device(struct libhoth_device* dev, uint32_t timeout_us) {
       // within the configured timeout.
       fprintf(stderr, "libhoth: timed out claiming transport after %dus\n",
               timeout_us);
-      return LIBHOTH_ERR_INTERFACE_BUSY;
+      return LIBHOTH_ERR_CONSTRUCT(HOTH_CTX_INIT, HOTH_HOST_SPACE_LIBHOTH,
+                                   LIBHOTH_ERR_INTERFACE_BUSY);
     }
 
     usleep(wait_us);
@@ -108,9 +125,14 @@ int libhoth_claim_device(struct libhoth_device* dev, uint32_t timeout_us) {
   }
 
   // Unreachable
-  return LIBHOTH_ERR_FAIL;
+  return LIBHOTH_ERR_CONSTRUCT(HOTH_CTX_INIT, HOTH_HOST_SPACE_LIBHOTH,
+                               LIBHOTH_ERR_FAIL);
 }
 
-int libhoth_release_device(struct libhoth_device* dev) {
+libhoth_error libhoth_release_device(struct libhoth_device* dev) {
+  if (dev == NULL) {
+    return LIBHOTH_ERR_CONSTRUCT(HOTH_CTX_INIT, HOTH_HOST_SPACE_LIBHOTH,
+                                 LIBHOTH_ERR_INVALID_PARAMETER);
+  }
   return dev->release(dev);
 }
