@@ -1,20 +1,20 @@
 #include "protocol/test/libhoth_device_mock.h"
 
-static int send(struct libhoth_device* dev, const void* request,
-                size_t request_size) {
+static libhoth_error send(struct libhoth_device* dev, const void* request,
+                          size_t request_size) {
   LibHothDeviceMock* mock = (LibHothDeviceMock*)dev->user_ctx;
   return mock->send(dev, request, request_size);
 }
 
-static int receive(struct libhoth_device* dev, void* response,
-                   size_t max_response_size, size_t* actual_size,
-                   int timeout_ms) {
+static libhoth_error receive(struct libhoth_device* dev, void* response,
+                             size_t max_response_size, size_t* actual_size,
+                             int timeout_ms) {
   LibHothDeviceMock* mock = (LibHothDeviceMock*)dev->user_ctx;
   return mock->receive(dev, response, max_response_size, actual_size,
                        timeout_ms);
 }
 
-static int reconnect(struct libhoth_device* dev) {
+static libhoth_error reconnect(struct libhoth_device* dev) {
   LibHothDeviceMock* mock = (LibHothDeviceMock*)dev->user_ctx;
   return mock->reconnect(dev);
 }

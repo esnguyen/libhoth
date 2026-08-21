@@ -93,6 +93,17 @@ TEST_F(LibhothStatusTest, LogErrnoError) {
   EXPECT_EQ(GetOutput(), expected);
 }
 
+TEST_F(LibhothStatusTest, LogPosixError) {
+  // Context: SPI, Space: POSIX, Code: EINVAL
+  libhoth_error err =
+      LIBHOTH_ERR_CONSTRUCT(HOTH_CTX_SPI, HOTH_HOST_SPACE_POSIX, EINVAL);
+  libhoth_log_err(temp_file_, err);
+
+  std::string expected =
+      std::string("[SPI][POSIX][") + strerror(EINVAL) + "]\n";
+  EXPECT_EQ(GetOutput(), expected);
+}
+
 TEST_F(LibhothStatusTest, LogUnhandledSpaceHex) {
   // Context: CMD_EXEC, Space: LIBHOTH, Code: 4 (LIBHOTH_ERR_TIMEOUT)
   libhoth_error err =

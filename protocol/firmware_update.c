@@ -52,10 +52,5 @@ libhoth_error libhoth_firmware_update_from_flash_and_reset(
       "Lost connection after firmware update command (error code 0x%016lx). "
       "This is expected if the device reset. Attempting to reconnect...\n",
       err);
-  int ret = libhoth_device_reconnect(dev);
-  if (ret != LIBHOTH_OK) {
-    return LIBHOTH_ERR_CONSTRUCT(HOTH_CTX_CMD_EXEC, HOTH_HOST_SPACE_LIBHOTH,
-                                 ret);
-  }
-  return HOTH_SUCCESS;
+  return libhoth_device_reconnect(dev);
 }

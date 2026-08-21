@@ -110,19 +110,20 @@ int htool_console_run(struct libhoth_device* dev,
       // TODO: Read STDIN during this time and buffer it so we can capture
       // quit events even when the console is disconnected. We will also want
       // to tune the reconnect time to match.
-      status = libhoth_device_reconnect(dev);
-      // If USB is down we might fail reconnect, just retry
-      if (status != LIBHOTH_OK) {
+      if (libhoth_device_reconnect(dev) != HOTH_SUCCESS) {
         // Make sure we don't end up in a tight retry loop
         usleep(100 * 1000);
+      } else {
+        status = LIBHOTH_OK;
       }
     }
     // Give an opportunity for other clients to use the interface.
     libhoth_release_device(dev);
     usleep(1000 * opts->yield_ms);
-    status = libhoth_claim_device(dev, 1000 * 1000 * opts->claim_timeout_secs);
-    if (status != LIBHOTH_OK) {
+    if (libhoth_claim_device(dev, 1000 * 1000 * opts->claim_timeout_secs) !=
+        HOTH_SUCCESS) {
       // If USB is down we might fail claim, just go back and retry
+      status = LIBHOTH_ERR_FAIL;
       continue;
     }
 

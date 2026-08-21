@@ -26,11 +26,11 @@
 
 class LibHothDeviceMock {
  public:
-  MOCK_METHOD(int, send,
+  MOCK_METHOD(libhoth_error, send,
               (struct libhoth_device * dev, const void* request,
                size_t request_size),
               ());
-  MOCK_METHOD(int, receive,
+  MOCK_METHOD(libhoth_error, receive,
               (struct libhoth_device * dev, void* response,
                size_t max_response_size, size_t* actual_size, int timeout_ms),
               ());
@@ -39,7 +39,7 @@ class LibHothDeviceMock {
                const void* request, size_t request_size, void* response,
                size_t max_response_size, size_t* bytes_read),
               ());
-  MOCK_METHOD(int, reconnect, (struct libhoth_device * dev), ());
+  MOCK_METHOD(libhoth_error, reconnect, (struct libhoth_device * dev), ());
 };
 
 class LibHothTest : public testing::Test {

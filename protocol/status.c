@@ -50,6 +50,8 @@ const char* libhoth_error_space_str(uint16_t space) {
       return "LIBHOTH";
     case HOTH_HOST_SPACE_PIEROT_ERR:
       return "PIE_ROT";
+    case HOTH_HOST_SPACE_POSIX:
+      return "POSIX";
     default:
       return "UNKNOWN";
   }
@@ -125,6 +127,7 @@ void libhoth_log_err(FILE* stream, libhoth_error err) {
 #endif
     case HOTH_HOST_SPACE_MTD:
     case HOTH_HOST_SPACE_SPIDEV:
+    case HOTH_HOST_SPACE_POSIX:
       code_str = strerror(code);
       break;
     case HOTH_HOST_SPACE_EC:

@@ -17,6 +17,8 @@
 
 #include <stddef.h>
 
+#include "protocol/status.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -27,8 +29,9 @@ struct libhoth_dbus_device_init_options {
   const char* hoth_id;
 };
 
-int libhoth_dbus_open(const struct libhoth_dbus_device_init_options* options,
-                      struct libhoth_device** out);
+libhoth_error libhoth_dbus_open(
+    const struct libhoth_dbus_device_init_options* options,
+    struct libhoth_device** out);
 
 #ifdef __cplusplus
 }

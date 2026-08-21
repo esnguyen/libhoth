@@ -83,6 +83,7 @@ enum hoth_host_space {
   HOTH_HOST_SPACE_SPIDEV = 0x0004,      // SPIDEV failures
   HOTH_HOST_SPACE_LIBHOTH = 0x0005,     // libhoth internal errors
   HOTH_HOST_SPACE_PIEROT_ERR = 0x0006,  // Pie-RoT 32-bit firmware errors
+  HOTH_HOST_SPACE_POSIX = 0x0007,       // POSIX errno values
 };
 
 #ifndef __packed

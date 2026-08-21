@@ -28,6 +28,14 @@
 #include "transports/libhoth_device.h"
 #include "transports/libhoth_ec.h"
 
+static libhoth_error mtd_err_libhoth(int libhoth_err) {
+  if (libhoth_err == LIBHOTH_OK) {
+    return HOTH_SUCCESS;
+  }
+  return LIBHOTH_ERR_CONSTRUCT(HOTH_CTX_INIT, HOTH_HOST_SPACE_LIBHOTH,
+                               libhoth_err);
+}
+
 static int mtd_read(int fd, unsigned int address, void* data, size_t data_len) {
   if (fd < 0 || !data) {
     return LIBHOTH_ERR_INVALID_PARAMETER;
@@ -85,38 +93,38 @@ static int mtd_write(int fd, unsigned int address, const void* data,
   return LIBHOTH_OK;
 }
 
-static int libhoth_mtd_claim(struct libhoth_device* dev) {
+static libhoth_error libhoth_mtd_claim(struct libhoth_device* dev) {
   if (dev == NULL) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return mtd_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
   const struct libhoth_mtd_device* mtd_dev = dev->user_ctx;
   if (mtd_dev == NULL) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return mtd_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
   if (flock(mtd_dev->fd, LOCK_EX | LOCK_NB) != 0) {
     // Maybe some other process has the lock?
-    return LIBHOTH_ERR_INTERFACE_BUSY;
+    return mtd_err_libhoth(LIBHOTH_ERR_INTERFACE_BUSY);
   }
-  return LIBHOTH_OK;
+  return HOTH_SUCCESS;
 }
 
-static int libhoth_mtd_release(struct libhoth_device* dev) {
+static libhoth_error libhoth_mtd_release(struct libhoth_device* dev) {
   if (dev == NULL) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return mtd_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
   const struct libhoth_mtd_device* mtd_dev = dev->user_ctx;
   if (mtd_dev == NULL) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return mtd_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
   if (flock(mtd_dev->fd, LOCK_UN) != 0) {
     // Maybe `fd` is invalid?
-    return LIBHOTH_ERR_FAIL;
+    return mtd_err_libhoth(LIBHOTH_ERR_FAIL);
   }
-  return LIBHOTH_OK;
+  return HOTH_SUCCESS;
 }
 
 static int mtd_open(const char* path, const char* name) {
@@ -163,21 +171,22 @@ static int mtd_open(const char* path, const char* name) {
   return -1;
 }
 
-int libhoth_mtd_open(const struct libhoth_mtd_device_init_options* options,
-                     struct libhoth_device** out) {
+libhoth_error libhoth_mtd_open(
+    const struct libhoth_mtd_device_init_options* options,
+    struct libhoth_device** out) {
   if (out == NULL || options == NULL || options->path == NULL ||
       options->name == NULL) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return mtd_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
-  int status = LIBHOTH_ERR_FAIL;
+  libhoth_error status = mtd_err_libhoth(LIBHOTH_ERR_FAIL);
   int fd = -1;
   struct libhoth_device* dev = NULL;
   struct libhoth_mtd_device* mtd_dev = NULL;
 
   fd = mtd_open(options->path, options->name);
   if (fd < 0) {
-    status = LIBHOTH_ERR_INTERFACE_NOT_FOUND;
+    status = mtd_err_libhoth(LIBHOTH_ERR_INTERFACE_NOT_FOUND);
     goto err_out;
   }
 
@@ -196,19 +205,19 @@ int libhoth_mtd_open(const struct libhoth_mtd_device_init_options* options,
   // lock using `libhoth_mtd_claim` and `libhoth_mtd_release` APIs
   if (flock(fd, LOCK_EX | LOCK_NB) != 0) {
     // Maybe some other process has the lock?
-    status = LIBHOTH_ERR_INTERFACE_BUSY;
+    status = mtd_err_libhoth(LIBHOTH_ERR_INTERFACE_BUSY);
     goto err_out;
   }
 
   dev = calloc(1, sizeof(struct libhoth_device));
   if (dev == NULL) {
-    status = LIBHOTH_ERR_MALLOC_FAILED;
+    status = mtd_err_libhoth(LIBHOTH_ERR_MALLOC_FAILED);
     goto err_out;
   }
 
   mtd_dev = calloc(1, sizeof(struct libhoth_mtd_device));
   if (mtd_dev == NULL) {
-    status = LIBHOTH_ERR_MALLOC_FAILED;
+    status = mtd_err_libhoth(LIBHOTH_ERR_MALLOC_FAILED);
     goto err_out;
   }
 
@@ -224,7 +233,7 @@ int libhoth_mtd_open(const struct libhoth_mtd_device_init_options* options,
   dev->user_ctx = mtd_dev;
 
   *out = dev;
-  return LIBHOTH_OK;
+  return HOTH_SUCCESS;
 
 err_out:
   if (fd >= 0) {
@@ -239,28 +248,31 @@ err_out:
   return status;
 }
 
-int libhoth_mtd_send_request(struct libhoth_device* dev, const void* request,
-                             size_t request_size) {
+libhoth_error libhoth_mtd_send_request(struct libhoth_device* dev,
+                                       const void* request,
+                                       size_t request_size) {
   if (dev == NULL) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return mtd_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
   struct libhoth_mtd_device* mtd_dev =
       (struct libhoth_mtd_device*)dev->user_ctx;
 
-  return mtd_write(mtd_dev->fd, mtd_dev->mailbox_address, request,
-                   request_size);
+  return mtd_err_libhoth(
+      mtd_write(mtd_dev->fd, mtd_dev->mailbox_address, request, request_size));
 }
 
-int libhoth_mtd_receive_response(struct libhoth_device* dev, void* response,
-                                 size_t max_response_size, size_t* actual_size,
-                                 int timeout_ms) {
+libhoth_error libhoth_mtd_receive_response(struct libhoth_device* dev,
+                                           void* response,
+                                           size_t max_response_size,
+                                           size_t* actual_size,
+                                           int timeout_ms) {
   if (dev == NULL) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return mtd_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
   if (max_response_size < 8) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return mtd_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
   }
 
   size_t total_bytes = 0;
@@ -272,7 +284,7 @@ int libhoth_mtd_receive_response(struct libhoth_device* dev, void* response,
   // Read Header From Mailbox
   status = mtd_read(mtd_dev->fd, mtd_dev->mailbox_address, response, 8);
   if (status != LIBHOTH_OK) {
-    return status;
+    return mtd_err_libhoth(status);
   }
 
   total_bytes = 8;
@@ -282,7 +294,7 @@ int libhoth_mtd_receive_response(struct libhoth_device* dev, void* response,
   }
 
   if (max_response_size < (total_bytes + host_response.data_len)) {
-    return LIBHOTH_ERR_RESPONSE_BUFFER_OVERFLOW;
+    return mtd_err_libhoth(LIBHOTH_ERR_RESPONSE_BUFFER_OVERFLOW);
   }
 
   // Read remainder of data based on header length
@@ -290,28 +302,28 @@ int libhoth_mtd_receive_response(struct libhoth_device* dev, void* response,
   status = mtd_read(mtd_dev->fd, mtd_dev->mailbox_address + total_bytes,
                     data_start, host_response.data_len);
   if (status != LIBHOTH_OK) {
-    return status;
+    return mtd_err_libhoth(status);
   }
 
   if (actual_size) {
     *actual_size += host_response.data_len;
   }
 
-  return LIBHOTH_OK;
+  return HOTH_SUCCESS;
 }
 
-int libhoth_mtd_close(struct libhoth_device* dev) {
+libhoth_error libhoth_mtd_close(struct libhoth_device* dev) {
   if (dev == NULL) {
-    return LIBHOTH_ERR_INVALID_PARAMETER;
+    return mtd_err_libhoth(LIBHOTH_ERR_INVALID_PARAMETER);
   }
   struct libhoth_mtd_device* mtd_dev =
       (struct libhoth_mtd_device*)dev->user_ctx;
   close(mtd_dev->fd);
   free(dev->user_ctx);
-  return LIBHOTH_OK;
+  return HOTH_SUCCESS;
 }
 
-int libhoth_mtd_reconnect(struct libhoth_device* dev) {
+libhoth_error libhoth_mtd_reconnect(struct libhoth_device* dev) {
   // no-op
-  return LIBHOTH_OK;
+  return HOTH_SUCCESS;
 }

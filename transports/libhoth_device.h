@@ -28,14 +28,15 @@ extern "C" {
 #define LIBHOTH_REBOOT_DELAY_MS 1000
 
 struct libhoth_device {
-  int (*send)(struct libhoth_device* dev, const void* request,
-              size_t request_size);
-  int (*receive)(struct libhoth_device* dev, void* response,
-                 size_t max_response_size, size_t* actual_size, int timeout_ms);
-  int (*close)(struct libhoth_device* dev);
-  int (*claim)(struct libhoth_device* dev);
-  int (*release)(struct libhoth_device* dev);
-  int (*reconnect)(struct libhoth_device* dev);
+  libhoth_error (*send)(struct libhoth_device* dev, const void* request,
+                        size_t request_size);
+  libhoth_error (*receive)(struct libhoth_device* dev, void* response,
+                           size_t max_response_size, size_t* actual_size,
+                           int timeout_ms);
+  libhoth_error (*close)(struct libhoth_device* dev);
+  libhoth_error (*claim)(struct libhoth_device* dev);
+  libhoth_error (*release)(struct libhoth_device* dev);
+  libhoth_error (*reconnect)(struct libhoth_device* dev);
 
   void* user_ctx;
 };
@@ -44,8 +45,8 @@ struct libhoth_device {
 // This function is not thread-safe. In multi-threaded contexts, callers must
 // ensure libhoth_send_request() and libhoth_receive_response() occur
 // atomically (with respect to other calls to those functions).
-int libhoth_send_request(struct libhoth_device* dev, const void* request,
-                         size_t request_size);
+libhoth_error libhoth_send_request(struct libhoth_device* dev,
+                                   const void* request, size_t request_size);
 
 // Response is a buffer where the EC response header and trailing payload will
 // be written. Errors if libhoth_send_request() wasn't called previously.
@@ -55,19 +56,20 @@ int libhoth_send_request(struct libhoth_device* dev, const void* request,
 // This function is not thread-safe. In multi-threaded contexts, callers must
 // ensure libhoth_send_request() and libhoth_receive_response() occur
 // atomically (with respect to other calls to those functions).
-int libhoth_receive_response(struct libhoth_device* dev, void* response,
-                             size_t max_response_size, size_t* actual_size,
-                             int timeout_ms);
+libhoth_error libhoth_receive_response(struct libhoth_device* dev,
+                                       void* response, size_t max_response_size,
+                                       size_t* actual_size, int timeout_ms);
 
-int libhoth_device_reconnect(struct libhoth_device* dev);
+libhoth_error libhoth_device_reconnect(struct libhoth_device* dev);
 
-int libhoth_device_close(struct libhoth_device* dev);
+libhoth_error libhoth_device_close(struct libhoth_device* dev);
 
 // Try to claim `dev`. If `dev` is already claimed, then try to claim later by
 // waiting an exponentially backed off amount of time.
-int libhoth_claim_device(struct libhoth_device* dev, uint32_t timeout_us);
+libhoth_error libhoth_claim_device(struct libhoth_device* dev,
+                                   uint32_t timeout_us);
 
-int libhoth_release_device(struct libhoth_device* dev);
+libhoth_error libhoth_release_device(struct libhoth_device* dev);
 
 #ifdef __cplusplus
 }
