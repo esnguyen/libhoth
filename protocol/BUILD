@@ -542,8 +542,23 @@ cc_library(
     hdrs = ["console.h"],
     deps = [
         ":host_cmd",
+        ":libhoth_status",
         ":util",
         "//transports:libhoth_device",
+    ],
+)
+
+cc_test(
+    name = "console_test",
+    srcs = ["console_test.cc"],
+    deps = [
+        ":console",
+        ":host_cmd",
+        ":libhoth_status",
+        "//protocol/test:libhoth_device_mock",
+        "//transports:libhoth_device",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
     ],
 )
 
